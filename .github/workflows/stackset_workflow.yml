@@ -1,0 +1,51 @@
+name: Delete CloudFormation StackSet and Instances
+on:
+  workflow_call:
+    inputs:
+      stack-set-name:
+        description: 'Stack-set name to delete'
+        required: true
+        type: string
+      aws-region:
+        description: 'AWS region where the stack-set is deployed'
+        required: true
+        type: string
+      account-ids:
+        description: 'Comma-separated list of account IDs to delete the StackSet instances from'
+        required: true
+        type: string
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_SESSION_TOKEN:
+        required: true
+      AWS_ROLE_TO_ASSUME:
+        required: false
+
+jobs:
+  delete-stackset:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Delete StackSet Instances
+        run: |
+          aws cloudformation delete-stack-instances \
+            --stack-set-name ${{ inputs.stack-set-name }} \
+            --accounts ${{ inputs.account-ids }} \
+            --regions ${{ inputs.aws-region }} \
+            --no-retain-initiated-accounts
+
+      - name: Delete StackSet
+        run: |
+          aws cloudformation delete-stack-set \
+            --stack-set-name ${{ inputs.stack-set-name }}
