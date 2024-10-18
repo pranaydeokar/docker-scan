@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call Delete StackSet Workflow
-        uses: ./.github/workflows/delete-stackset.yml
+        uses: ./.github/workflows/stackset_workflow.yml
         with:
           stack-set-name: ${{ github.event.inputs.stack-set-name }}
           aws-region: ${{ github.event.inputs.aws-region }}
