@@ -1,0 +1,71 @@
+name: Delete AWS CloudFormation StackSet Instances and Stacks
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Specify the services to delete (e.g., access-analyser, guard-duty, inspector). Use a comma to separate multiple services.'
+        required: true
+      stack-set-name:
+        description: 'Specify the StackSet name associated with the services.'
+        required: true
+      account-id:
+        description: 'Specify the AWS Account ID for the StackSet instances.'
+        required: true
+      region:
+        description: 'Specify the AWS Region for the StackSet instances.'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate-services:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.set-services.outputs.services }}
+    steps:
+      - name: Set services from input
+        id: set-services
+        run: |
+          if [[ -z "${{ github.event.inputs.services }}" ]]; then
+            echo "No services selected. Skipping deletion."
+            echo "services=none" >> $GITHUB_ENV
+          else
+            echo "services=${{ github.event.inputs.services }}" >> $GITHUB_ENV
+          fi
+
+  delete-stackset-instances:
+    needs: validate-services
+    runs-on: ubuntu-latest
+    if: steps.set-services.outputs.services != 'none'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ github.event.inputs.region }}
+
+      - name: Delete CloudFormation StackSet Instances
+        run: |
+          IFS=',' read -ra SERVICE_ARRAY <<< "${{ github.event.inputs.services }}"
+          for SERVICE in "${SERVICE_ARRAY[@]}"; do
+            echo "Deleting StackSet instance for service: $SERVICE"
+            aws cloudformation delete-stack-instances \
+              --stack-set-name "${{ github.event.inputs.stack-set-name }}" \
+              --accounts "${{ github.event.inputs.account-id }}" \
+              --regions "${{ github.event.inputs.region }}" \
+              --retain-stacks false \
+              --operation-preferences FailureToleranceCount=1,MaxConcurrentCount=2 || echo "Failed to delete StackSet instance for $SERVICE"
+          done
+
+  delete-stackset:
+    needs: delete-stackset-instances
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete CloudFormation StackSet
+        run: |
+          echo "Deleting StackSet: ${{ github.event.inputs.stack-set-name }}"
+          aws cloudformation delete-stack-set --stack-set-name "${{ github.event.inputs.stack-set-name }}" || echo "Failed to delete StackSet"
