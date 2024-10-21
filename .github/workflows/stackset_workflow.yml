@@ -1,70 +1,75 @@
-name: Deploy and Delete Security Services
+---
+name: Cloudformation stack-set & stack-set-instances
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      services:
-        description: 'Specify the services to deploy or delete (access-analyser, guard-duty, inspector, macie, securityhub, detective, config). Use a comma to separate multiple services.'
+      aws-region:
+        description: 'AWS region (in this region stackset enabled)'
+        required: false
+        default: 'us-east-2'
+        type: string
+      stackset-instance-region:
+        description: 'Stackset-instance regions where you need CloudFormation stacks'
+        required: false
+        default: 'us-east-2'
+        type: string
+      stack-set-name:
+        description: 'Stack-set name defined here'
         required: true
-      action:
-        description: 'Choose action (deploy or delete)'
-        required: true
-        default: 'deploy'
-
-permissions:
-  id-token: write
-  contents: read
+        type: string
+      delete-stackset:
+        description: 'Set to true if you want to delete the StackSet and instances'
+        required: false
+        default: 'false'
+        type: boolean
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+      AWS_SESSION_TOKEN:
+        required: false
+      AWS_ROLE_TO_ASSUME:
+        required: false
+      account-ids:
+        description: 'Account IDs for self-managed permission'
+        required: false
 
 jobs:
-  validate-services:
+  delete-stack-instances:
+    if: inputs.delete-stackset == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.set-services.outputs.services }}
     steps:
-      - name: Set services from input
-        id: set-services
-        run: |
-          if [[ -z "${{ github.event.inputs.services }}" ]]; then
-            echo "No services selected. Skipping deployment."
-            echo "::set-output name=services::none"
-          else
-            echo "::set-output name=services::${{ github.event.inputs.services }}"
-          fi
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ inputs.aws-region }}
 
-  deploy-services:
-    if: needs.validate-services.outputs.services != 'none' && github.event.inputs.action == 'deploy'
-    runs-on: ubuntu-latest
-    needs: validate-services
-    steps:
-      # Add deployment steps here (similar to your original deployment jobs)
-
-  delete-services:
-    if: needs.validate-services.outputs.services != 'none' && github.event.inputs.action == 'delete'
-    runs-on: ubuntu-latest
-    needs: validate-services
-    steps:
-      - name: Set services to delete
-        id: set-delete-services
+      - name: Delete Stack Instances
         run: |
-          services_to_delete="${{ github.event.inputs.services }}"
-          IFS=',' read -r -a service_list <<< "$services_to_delete"
-          for service in "${service_list[@]}"; do
-            if [[ "$service" == "access-analyser" ]]; then
-              echo "Deleting Access Analyser stack and stack-set instances..."
-              aws cloudformation delete-stack-set --stack-set-name "Access-analyser"
-              aws cloudformation delete-stack-instances \
-                --stack-set-name "Access-analyser" \
-                --regions us-east-1 \
-                --accounts ${{ secrets.ACCOUNT_IDS }} \
-                --no-retain
-            fi
-            if [[ "$service" == "guard-duty" ]]; then
-              echo "Deleting GuardDuty stack and stack-set instances..."
-              aws cloudformation delete-stack-set --stack-set-name "GuardDuty"
-              aws cloudformation delete-stack-instances \
-                --stack-set-name "GuardDuty" \
-                --regions us-east-1 \
-                --accounts ${{ secrets.ACCOUNT_IDS }} \
-                --no-retain
-            fi
-            # Add more services deletion logic as needed
-          done
+          echo "Deleting stack instances for ${{ inputs.stack-set-name }}..."
+          aws cloudformation delete-stack-instances \
+            --stack-set-name "${{ inputs.stack-set-name }}" \
+            --regions ${{ inputs.stackset-instance-region }} \
+            --accounts ${ACCOUNTS:=${{ secrets.account-ids }}} \
+            --no-retain \
+            --operation-preferences MaxConcurrentCount=1
+
+  delete-stackset:
+    if: inputs.delete-stackset == 'true'
+    needs: delete-stack-instances
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Delete StackSet
+        run: |
+          echo "Deleting stack set ${{ inputs.stack-set-name }}..."
+          aws cloudformation delete-stack-set \
+            --stack-set-name "${{ inputs.stack-set-name }}"
+
