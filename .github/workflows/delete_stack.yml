@@ -1,28 +1,77 @@
-name: Call Delete StackSet Workflow
+name: Delete Security Services
 on:
   workflow_dispatch:
     inputs:
-      stack-set-name:
-        description: 'Stack-set name to delete'
-        required: true
-      aws-region:
-        description: 'AWS region where the stack-set is deployed'
-        required: true
-      account-ids:
-        description: 'Comma-separated list of account IDs to delete the StackSet instances from'
+      services:
+        description: 'Specify the services to delete (access-analyser, guard-duty, inspector, macie, securityhub, detective, config). Use a comma to separate multiple services.'
         required: true
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  call-delete-stackset:
+  validate-services:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.set-services.outputs.services }}
+    steps:
+      - name: Set services from input
+        id: set-services
+        run: |
+          if [[ -z "${{ github.event.inputs.services }}" ]]; then
+            echo "No services specified. Skipping deletion."
+            echo "::set-output name=services::none"
+          else
+            echo "::set-output name=services::${{ github.event.inputs.services }}"
+          fi
+
+  delete-stack-instances:
+    needs: validate-services
     runs-on: ubuntu-latest
     steps:
-      - name: Call Delete StackSet Workflow
-        uses: ./.github/workflows/stackset_workflow.yml
-        with:
-          stack-set-name: ${{ github.event.inputs.stack-set-name }}
-          aws-region: ${{ github.event.inputs.aws-region }}
-          account-ids: ${{ github.event.inputs.account-ids }}
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      - name: Delete Stack Instances for Selected Services
+        run: |
+          services_to_delete="${{ github.event.inputs.services }}"
+          IFS=',' read -r -a service_list <<< "$services_to_delete"
+          for service in "${service_list[@]}"; do
+            # Delete StackSet instances for service
+            if [[ "$service" == "access-analyser" ]]; then
+              echo "Deleting Access Analyser stack instances..."
+              aws cloudformation delete-stack-instances \
+                --stack-set-name "Access-analyser" \
+                --regions us-east-1 \
+                --accounts ${{ secrets.ACCOUNT_IDS }} \
+                --no-retain
+            fi
+            if [[ "$service" == "guard-duty" ]]; then
+              echo "Deleting GuardDuty stack instances..."
+              aws cloudformation delete-stack-instances \
+                --stack-set-name "GuardDuty" \
+                --regions us-east-1 \
+                --accounts ${{ secrets.ACCOUNT_IDS }} \
+                --no-retain
+            fi
+            # Add more stack instances deletion logic here
+          done
+
+  delete-stacksets:
+    needs: delete-stack-instances
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete StackSets for Selected Services
+        run: |
+          services_to_delete="${{ github.event.inputs.services }}"
+          IFS=',' read -r -a service_list <<< "$services_to_delete"
+          for service in "${service_list[@]}"; do
+            # Delete StackSets for service
+            if [[ "$service" == "access-analyser" ]]; then
+              echo "Deleting Access Analyser stackset..."
+              aws cloudformation delete-stack-set --stack-set-name "Access-analyser"
+            fi
+            if [[ "$service" == "guard-duty" ]]; then
+              echo "Deleting GuardDuty stackset..."
+              aws cloudformation delete-stack-set --stack-set-name "GuardDuty"
+            fi
+            # Add more stackset deletion logic here
+          done
