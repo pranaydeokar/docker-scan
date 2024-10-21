@@ -25,7 +25,8 @@ jobs:
             echo "::set-output name=services::none"
           else
             echo "::set-output name=services::${{ github.event.inputs.services }}"
-            
+          fi
+
   AccessAnalyser:
     needs: validate-services
     if: contains(needs.validate-services.outputs.services, 'access-analyser')
