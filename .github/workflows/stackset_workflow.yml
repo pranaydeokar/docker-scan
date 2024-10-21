@@ -1,5 +1,5 @@
 ---
-name: Cloudformation stack-set & stack-set-instances
+name: Delete CloudFormation Stack Instances, Stack, and StackSet
 on:
   workflow_call:
     inputs:
@@ -56,9 +56,26 @@ jobs:
             --no-retain \
             --operation-preferences MaxConcurrentCount=1
 
-  delete-stackset:
+  delete-stack:
     if: inputs.delete-stackset == 'true'
     needs: delete-stack-instances
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Delete Stack
+        run: |
+          echo "Deleting stack for ${{ inputs.stack-set-name }}..."
+          aws cloudformation delete-stack \
+            --stack-name "${{ inputs.stack-set-name }}" 
+
+  delete-stackset:
+    if: inputs.delete-stackset == 'true'
+    needs: delete-stack
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS Credentials using OIDC
@@ -72,4 +89,3 @@ jobs:
           echo "Deleting stack set ${{ inputs.stack-set-name }}..."
           aws cloudformation delete-stack-set \
             --stack-set-name "${{ inputs.stack-set-name }}"
-
