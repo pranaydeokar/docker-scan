@@ -26,8 +26,21 @@ jobs:
             echo "::set-output name=services::${{ github.event.inputs.services }}"
           fi
 
-  delete-stack-instances:
+  assume-role:
     needs: validate-services
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_ROLE }}
+          aws-region: us-east-1
+          
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+  delete-stack-instances:
+    needs: assume-role
     runs-on: ubuntu-latest
     steps:
       - name: Delete Stack Instances for Selected Services
@@ -35,7 +48,7 @@ jobs:
           services_to_delete="${{ github.event.inputs.services }}"
           IFS=',' read -r -a service_list <<< "$services_to_delete"
           for service in "${service_list[@]}"; do
-            # Delete StackSet instances for service
+            # Delete StackSet instances for each service
             if [[ "$service" == "access-analyser" ]]; then
               echo "Deleting Access Analyser stack instances..."
               aws cloudformation delete-stack-instances \
@@ -52,7 +65,7 @@ jobs:
                 --accounts ${{ secrets.ACCOUNT_IDS }} \
                 --no-retain
             fi
-            # Add more stack instances deletion logic here
+            # Add more stack instances deletion logic here for other services
           done
 
   delete-stacksets:
@@ -64,14 +77,14 @@ jobs:
           services_to_delete="${{ github.event.inputs.services }}"
           IFS=',' read -r -a service_list <<< "$services_to_delete"
           for service in "${service_list[@]}"; do
-            # Delete StackSets for service
+            # Delete StackSets for each service
             if [[ "$service" == "access-analyser" ]]; then
-              echo "Deleting Access Analyser stackset..."
+              echo "Deleting Access Analyser StackSet..."
               aws cloudformation delete-stack-set --stack-set-name "Access-analyser"
             fi
             if [[ "$service" == "guard-duty" ]]; then
-              echo "Deleting GuardDuty stackset..."
+              echo "Deleting GuardDuty StackSet..."
               aws cloudformation delete-stack-set --stack-set-name "GuardDuty"
             fi
-            # Add more stackset deletion logic here
+            # Add more stackset deletion logic here for other services
           done
