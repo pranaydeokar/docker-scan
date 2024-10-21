@@ -29,7 +29,7 @@ jobs:
   AccessAnalyser:
     needs: validate-services
     if: contains(needs.validate-services.outputs.services, 'access-analyser')
-    uses: ./.github/workflows/sharedworkflow_delete-cloudformation-stackset.yml
+    uses: ./.github/workflows/stackset_workflow.yml
     with:
       stack-set-name: Access-analyser
       stack-instance-region: us-east-1
@@ -40,7 +40,7 @@ jobs:
   GuardDuty:
     needs: validate-services
     if: contains(needs.validate-services.outputs.services, 'guard-duty')
-    uses: ./.github/workflows/sharedworkflow_delete-cloudformation-stackset.yml
+    uses: ./.github/workflows/stackset_workflow.yml
     with:
       stack-set-name: GuardDuty
       stack-instance-region: us-east-1
