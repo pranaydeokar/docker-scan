@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/stackset_workflow.yml
     with:
       stack-set-name: Access-analyser
-      stack-instance-region: us-east-1
+      stackset-instance-region: us-east-1
     secrets:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_GITHUB_OIDC_ROLE }}
       account-ids: ${{ secrets.ACCOUNT_IDS }}
@@ -43,7 +43,7 @@ jobs:
     uses: ./.github/workflows/stackset_workflow.yml
     with:
       stack-set-name: GuardDuty
-      stack-instance-region: us-east-1
+      stackset-instance-region: us-east-1
     secrets:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_GITHUB_OIDC_ROLE }}
       account-ids: ${{ secrets.ACCOUNT_IDS }}
