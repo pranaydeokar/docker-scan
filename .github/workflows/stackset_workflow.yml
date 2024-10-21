@@ -1,51 +1,70 @@
-name: Delete CloudFormation StackSet and Instances
+name: Deploy and Delete Security Services
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
-      stack-set-name:
-        description: 'Stack-set name to delete'
+      services:
+        description: 'Specify the services to deploy or delete (access-analyser, guard-duty, inspector, macie, securityhub, detective, config). Use a comma to separate multiple services.'
         required: true
-        type: string
-      aws-region:
-        description: 'AWS region where the stack-set is deployed'
+      action:
+        description: 'Choose action (deploy or delete)'
         required: true
-        type: string
-      account-ids:
-        description: 'Comma-separated list of account IDs to delete the StackSet instances from'
-        required: true
-        type: string
-    secrets:
-      AWS_ACCESS_KEY_ID:
-        required: true
-      AWS_SECRET_ACCESS_KEY:
-        required: true
-      AWS_SESSION_TOKEN:
-        required: true
-      AWS_ROLE_TO_ASSUME:
-        required: false
+        default: 'deploy'
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
-  delete-stackset:
+  validate-services:
     runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.set-services.outputs.services }}
     steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ inputs.aws-region }}
-
-      - name: Delete StackSet Instances
+      - name: Set services from input
+        id: set-services
         run: |
-          aws cloudformation delete-stack-instances \
-            --stack-set-name ${{ inputs.stack-set-name }} \
-            --accounts ${{ inputs.account-ids }} \
-            --regions ${{ inputs.aws-region }} \
-            --no-retain-initiated-accounts
+          if [[ -z "${{ github.event.inputs.services }}" ]]; then
+            echo "No services selected. Skipping deployment."
+            echo "::set-output name=services::none"
+          else
+            echo "::set-output name=services::${{ github.event.inputs.services }}"
+          fi
 
-      - name: Delete StackSet
+  deploy-services:
+    if: needs.validate-services.outputs.services != 'none' && github.event.inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    needs: validate-services
+    steps:
+      # Add deployment steps here (similar to your original deployment jobs)
+
+  delete-services:
+    if: needs.validate-services.outputs.services != 'none' && github.event.inputs.action == 'delete'
+    runs-on: ubuntu-latest
+    needs: validate-services
+    steps:
+      - name: Set services to delete
+        id: set-delete-services
         run: |
-          aws cloudformation delete-stack-set \
-            --stack-set-name ${{ inputs.stack-set-name }}
+          services_to_delete="${{ github.event.inputs.services }}"
+          IFS=',' read -r -a service_list <<< "$services_to_delete"
+          for service in "${service_list[@]}"; do
+            if [[ "$service" == "access-analyser" ]]; then
+              echo "Deleting Access Analyser stack and stack-set instances..."
+              aws cloudformation delete-stack-set --stack-set-name "Access-analyser"
+              aws cloudformation delete-stack-instances \
+                --stack-set-name "Access-analyser" \
+                --regions us-east-1 \
+                --accounts ${{ secrets.ACCOUNT_IDS }} \
+                --no-retain
+            fi
+            if [[ "$service" == "guard-duty" ]]; then
+              echo "Deleting GuardDuty stack and stack-set instances..."
+              aws cloudformation delete-stack-set --stack-set-name "GuardDuty"
+              aws cloudformation delete-stack-instances \
+                --stack-set-name "GuardDuty" \
+                --regions us-east-1 \
+                --accounts ${{ secrets.ACCOUNT_IDS }} \
+                --no-retain
+            fi
+            # Add more services deletion logic as needed
+          done
