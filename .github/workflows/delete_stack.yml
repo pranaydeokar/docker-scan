@@ -24,6 +24,7 @@ jobs:
             echo "No services specified. Skipping deletion."
             echo "::set-output name=services::none"
           else
+            echo "Services specified: ${{ github.event.inputs.services }}"
             echo "::set-output name=services::${{ github.event.inputs.services }}"
           fi
 
@@ -38,15 +39,49 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_GITHUB_OIDC_ROLE }}
       account-ids: ${{ secrets.ACCOUNT_IDS }}
 
-  GuardDuty:
+  delete-services:
+    if: ${{ needs.validate-services.outputs.services != 'none' }}
+    runs-on: ubuntu-latest
     needs: validate-services
-    if: contains(needs.validate-services.outputs.services, 'guard-duty')
-    uses: ./.github/workflows/stackset_workflow.yml
-    with:
-      stack-set-name: GuardDuty
-      stackset-instance-region: us-east-1
-    secrets:
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_GITHUB_OIDC_ROLE }}
-      account-ids: ${{ secrets.ACCOUNT_IDS }}
+    steps:
+      - name: Delete Guard Duty
+        if: contains(needs.validate-services.outputs.services, 'guard-duty')
+        run: |
+          echo "Deleting Guard Duty..."
+          # Add your delete command here, e.g.,
+          # aws guardduty delete-detector
 
-  
+      - name: Delete Inspector
+        if: contains(needs.validate-services.outputs.services, 'inspector')
+        run: |
+          echo "Deleting Inspector..."
+          # Add your delete command here, e.g.,
+          # aws inspector delete-assessment-target
+
+      - name: Delete Macie
+        if: contains(needs.validate-services.outputs.services, 'macie')
+        run: |
+          echo "Deleting Macie..."
+          # Add your delete command here, e.g.,
+          # aws macie2 delete-classification-job
+
+      - name: Delete Security Hub
+        if: contains(needs.validate-services.outputs.services, 'securityhub')
+        run: |
+          echo "Deleting Security Hub..."
+          # Add your delete command here, e.g.,
+          # aws securityhub delete-security-hub
+
+      - name: Delete Detective
+        if: contains(needs.validate-services.outputs.services, 'detective')
+        run: |
+          echo "Deleting Detective..."
+          # Add your delete command here, e.g.,
+          # aws detective delete-graph
+
+      - name: Delete Config
+        if: contains(needs.validate-services.outputs.services, 'config')
+        run: |
+          echo "Deleting Config..."
+          # Add your delete command here, e.g.,
+          # aws configservice delete-configuration-recorder
