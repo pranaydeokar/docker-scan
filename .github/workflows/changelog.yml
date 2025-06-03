@@ -1,0 +1,16 @@
+name: changelog
+
+permissions: write-all
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+jobs:
+  changelog:
+    uses: ./.github/workflows/work.yml
+    secrets: inherit
+    with:
+      branch: 'main'
